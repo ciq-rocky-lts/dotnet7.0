@@ -6,10 +6,10 @@
 # until that's done, disable LTO.  This has to happen before setting the flags below.
 %define _lto_cflags %{nil}
 
-%global host_version 7.0.15
-%global runtime_version 7.0.15
+%global host_version 7.0.19
+%global runtime_version 7.0.19
 %global aspnetcore_runtime_version %{runtime_version}
-%global sdk_version 7.0.115
+%global sdk_version 7.0.119
 %global sdk_feature_band_version %(echo %{sdk_version} | cut -d '-' -f 1 | sed -e 's|[[:digit:]][[:digit:]]$|00|')
 %global templates_version %{runtime_version}
 #%%global templates_version %%(echo %%{runtime_version} | awk 'BEGIN { FS="."; OFS="." } {print $1, $2, $3+1 }')
@@ -51,7 +51,7 @@
 
 Name:           dotnet7.0
 Version:        %{sdk_rpm_version}
-Release:        1%{?dist}
+Release:        1.1%{?dist}
 Summary:        .NET Runtime and SDK
 License:        MIT and ASL 2.0 and BSD and LGPLv2+ and CC-BY and CC0 and MS-PL and EPL-1.0 and GPL+ and GPLv2 and ISC and OFL and zlib
 URL:            https://github.com/dotnet/
@@ -77,6 +77,8 @@ Source11:       dotnet.sh.in
 
 # Disable apphost; there's no net6.0 apphost for ppc64le
 Patch1:         roslyn-analyzers-ppc64le-apphost.patch
+# https://github.com/dotnet/runtime/pull/95216#issuecomment-1842799314
+Patch2:         runtime-re-enable-implicit-rejection.patch
 
 
 %if 0%{?fedora} || 0%{?rhel} >= 8
@@ -90,8 +92,9 @@ BuildRequires:  clang
 BuildRequires:  cmake
 BuildRequires:  coreutils
 %if %{without bootstrap}
-BuildRequires:  dotnet-sdk-7.0
-BuildRequires:  dotnet-sdk-7.0-source-built-artifacts
+# Get out the door with broken LTS by pinning the versions
+BuildRequires:  dotnet-sdk-7.0 == 7.0.115
+BuildRequires:  dotnet-sdk-7.0-source-built-artifacts == 7.0.115
 %endif
 BuildRequires:  findutils
 BuildRequires:  git
@@ -323,7 +326,7 @@ applications using the .NET SDK.
 %dotnet_targeting_pack dotnet-apphost-pack-7.0 %{runtime_rpm_version} Microsoft.NETCore.App 7.0 Microsoft.NETCore.App.Host.%{runtime_id}
 %dotnet_targeting_pack dotnet-targeting-pack-7.0 %{runtime_rpm_version} Microsoft.NETCore.App 7.0 Microsoft.NETCore.App.Ref
 %dotnet_targeting_pack aspnetcore-targeting-pack-7.0 %{aspnetcore_runtime_rpm_version} Microsoft.AspNetCore.App 7.0 Microsoft.AspNetCore.App.Ref
-#%%dotnet_targeting_pack netstandard-targeting-pack-2.1 %%{sdk_rpm_version} NETStandard.Library 2.1 NETStandard.Library.Ref
+%dotnet_targeting_pack netstandard-targeting-pack-2.1 %{sdk_rpm_version} NETStandard.Library 2.1 NETStandard.Library.Ref
 
 
 %package -n dotnet-sdk-7.0-source-built-artifacts
@@ -398,6 +401,7 @@ popd
 %endif
 
 %patch1 -p1
+%patch2 -p1
 
 # Fix bad hardcoded path in build
 sed -i 's|/usr/share/dotnet|%{_libdir}/dotnet|' src/runtime/src/native/corehost/hostmisc/pal.unix.cpp
@@ -515,35 +519,30 @@ find %{buildroot}%{_libdir}/dotnet/ -type f -name '*.targets' -exec chmod -x {} 
 find %{buildroot}%{_libdir}/dotnet/ -type f -name '*.txt' -exec chmod -x {} \;
 find %{buildroot}%{_libdir}/dotnet/ -type f -name '*.xml' -exec chmod -x {} \;
 
-# Provided by dotnet-host from another SRPM
-#install -dm 0755 %%{buildroot}%%{_sysconfdir}/profile.d/
-#install dotnet.sh %%{buildroot}%%{_sysconfdir}/profile.d/
+install -dm 0755 %{buildroot}%{_sysconfdir}/profile.d/
+install dotnet.sh %{buildroot}%{_sysconfdir}/profile.d/
 
-# Provided by dotnet-host from another SRPM
-#install -dm 0755 %%{buildroot}/%%{_datadir}/bash-completion/completions
+install -dm 0755 %{buildroot}/%{_datadir}/bash-completion/completions
 # dynamic completion needs the file to be named the same as the base command
-#install src/sdk/scripts/register-completions.bash %%{buildroot}/%%{_datadir}/bash-completion/completions/dotnet
+install src/sdk/scripts/register-completions.bash %{buildroot}/%{_datadir}/bash-completion/completions/dotnet
 
 # TODO: the zsh completion script needs to be ported to use #compdef
 #install -dm 755 %%{buildroot}/%%{_datadir}/zsh/site-functions
 #install src/cli/scripts/register-completions.zsh %%{buildroot}/%%{_datadir}/zsh/site-functions/_dotnet
 
-# Provided by dotnet-host from another SRPM
-#install -dm 0755 %%{buildroot}%%{_bindir}
-#ln -s ../../%%{_libdir}/dotnet/dotnet %%{buildroot}%%{_bindir}/
+install -dm 0755 %{buildroot}%{_bindir}
+ln -s ../../%{_libdir}/dotnet/dotnet %{buildroot}%{_bindir}/
 
-# Provided by dotnet-host from another SRPM
-#for section in 1 7; do
-#    install -dm 0755 %%{buildroot}%%{_mandir}/man${section}/
-#    find -iname 'dotnet*'.${section} -type f -exec cp {} %%{buildroot}%%{_mandir}/man${section}/ \;
-#done
+for section in 1 7; do
+    install -dm 0755 %{buildroot}%{_mandir}/man${section}/
+    find -iname 'dotnet*'.${section} -type f -exec cp {} %{buildroot}%{_mandir}/man${section}/ \;
+done
 
-# Provided by dotnet-host from another SRPM
-#install -dm 0755 %%{buildroot}%%{_sysconfdir}/dotnet
-#echo "%%{_libdir}/dotnet" >> install_location
-#install install_location %%{buildroot}%%{_sysconfdir}/dotnet/
-#echo "%%{_libdir}/dotnet" >> install_location_%%{runtime_arch}
-#install install_location_%%{runtime_arch} %%{buildroot}%%{_sysconfdir}/dotnet/
+install -dm 0755 %{buildroot}%{_sysconfdir}/dotnet
+echo "%{_libdir}/dotnet" >> install_location
+install install_location %{buildroot}%{_sysconfdir}/dotnet/
+echo "%{_libdir}/dotnet" >> install_location_%{runtime_arch}
+install install_location_%{runtime_arch} %{buildroot}%{_sysconfdir}/dotnet/
 
 install -dm 0755 %{buildroot}%{_libdir}/dotnet/source-built-artifacts
 install -m 0644 artifacts/%{runtime_arch}/Release/Private.SourceBuilt.Artifacts.*.tar.gz %{buildroot}/%{_libdir}/dotnet/source-built-artifacts/
@@ -559,7 +558,7 @@ echo "Testing build results for debug symbols..."
 %{SOURCE10} -v %{buildroot}%{_libdir}/dotnet/
 
 
-# Self-check
+%check
 %if 0%{?fedora} > 35
 # lttng in Fedora > 35 is incompatible with .NET
 export COMPlus_LTTng=0
@@ -568,14 +567,26 @@ export COMPlus_LTTng=0
 %{buildroot}%{_libdir}/dotnet/dotnet --info
 %{buildroot}%{_libdir}/dotnet/dotnet --version
 
-# Provided by dotnet-host from another SRPM
-rm %{buildroot}%{_libdir}/dotnet/LICENSE.txt
-rm %{buildroot}%{_libdir}/dotnet/ThirdPartyNotices.txt
-rm %{buildroot}%{_libdir}/dotnet/dotnet
+%if 0%{?rhel} <= 8
+%files -n dotnet
+# empty package useful for dependencies
+%endif
 
-# Provided by netstandard-targeting-pack-2.1 from another SRPM
-rm -rf %{buildroot}%{_libdir}/dotnet/packs/NETStandard.Library.Ref/2.1.0
-
+%files -n dotnet-host
+%dir %{_libdir}/dotnet
+%{_libdir}/dotnet/dotnet
+%dir %{_libdir}/dotnet/host
+%dir %{_libdir}/dotnet/host/fxr
+%{_bindir}/dotnet
+%license %{_libdir}/dotnet/LICENSE.txt
+%license %{_libdir}/dotnet/ThirdPartyNotices.txt
+%doc %{_mandir}/man1/dotnet*.1.gz
+%doc %{_mandir}/man7/dotnet*.7.gz
+%config(noreplace) %{_sysconfdir}/profile.d/dotnet.sh
+%config(noreplace) %{_sysconfdir}/dotnet
+%dir %{_datadir}/bash-completion
+%dir %{_datadir}/bash-completion/completions
+%{_datadir}/bash-completion/completions/dotnet
 
 %files -n dotnet-hostfxr-7.0
 %dir %{_libdir}/dotnet/host/fxr
@@ -609,13 +620,33 @@ rm -rf %{buildroot}%{_libdir}/dotnet/packs/NETStandard.Library.Ref/2.1.0
 
 
 %changelog
-* Wed Dec 20 2023 Omair Majid <omajid@redhat.com> - 7.0.115-1
-- Update to .NET SDK 7.0.115 and Runtime 7.0.15
-- Resolves: RHEL-19808
+* Sat May 03 2025 Anmol Jain <ajain@ciq.com> - 7.0.119-1.1
+- Import .NET latest Security Fixes to CIQ LTS 9.2
+- Revert patches for packages conflicting with 8.0 as 8.0 is not present in LTS 9.2
 
-* Thu Nov 02 2023 Omair Majid <omajid@redhat.com> - 7.0.114-1
+* Mon May 06 2024 Omair Majid <omajid@redhat.com> - 7.0.119-1
+- Update to .NET SDK 7.0.119 and Runtime 7.0.19
+- Resolves: RHEL-35314
+
+* Tue Apr 09 2024 Omair Majid <omajid@redhat.com> - 7.0.118-2
+- Update to .NET SDK 7.0.118 and Runtime 7.0.18
+- Resolves: RHEL-31203
+
+* Tue Mar 19 2024 Omair Majid <omajid@redhat.com> - 7.0.117-2
+- Update to .NET SDK 7.0.117 and Runtime 7.0.17
+- Resolves: RHEL-27545
+
+* Wed Feb 14 2024 Omair Majid <omajid@redhat.com> - 7.0.116-2
+- Update to .NET SDK 7.0.116 and Runtime 7.0.16
+- Resolves: RHEL-23790
+
+* Mon Jan 15 2024 Omair Majid <omajid@redhat.com> - 7.0.115-2
+- Update to .NET SDK 7.0.115 and Runtime 7.0.15
+- Resolves: RHEL-19802
+
+* Mon Dec 11 2023 Omair Majid <omajid@redhat.com> - 7.0.114-2
 - Update to .NET SDK 7.0.114 and Runtime 7.0.14
-- Resolves: RHEL-15357
+- Resolves: RHEL-15351
 
 * Tue Oct 24 2023 Omair Majid <omajid@redhat.com> - 7.0.113-2
 - Update to .NET SDK 7.0.113 and Runtime 7.0.13
