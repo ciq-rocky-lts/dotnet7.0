@@ -1,0 +1,63 @@
+Fix source-build in 2026 (identitymodel FileVersion overflow)
+
+Adapted from https://github.com/dotnet/dotnet/pull/4043, which fixes
+https://github.com/dotnet/dotnet/issues/4037, for the .NET 7.0
+source-build tarball:
+
+- .NET 7.0 builds IdentityModel 6.35.0 from src/source-build-externals.
+  That version sets FileVersion in updateAssemblyInfo.sh, which patch
+  0002 adds, not in build/common.props.  Its revision, (yy-19)MMdd, is
+  above 65535 from 2026 on, so csc fails with CS7035.  Add patch 0003
+  with the PR's formula, 61232 + (year-2019)*416 + MM*32 + dd, as
+  Microsoft backported it to source-build-externals release/8.0.
+  source-build applies a repo's patches in sorted order, so 0003 runs
+  after 0002 creates the script.  The revision overflows again from
+  2029-04-16.
+- Drop the PR's Roslyn LanguageServer change for
+  https://github.com/dotnet/dotnet/issues/3995; that project does not
+  exist in .NET 7.0.
+
+diff --git a/src/source-build-externals/patches/azure-activedirectory-identitymodel-extensions-for-dotnet/0003-Fix-assembly-version-calculation-in-2026.patch b/src/source-build-externals/patches/azure-activedirectory-identitymodel-extensions-for-dotnet/0003-Fix-assembly-version-calculation-in-2026.patch
+new file mode 100644
+index 000000000000..72e972bd82da
+--- /dev/null
++++ b/src/source-build-externals/patches/azure-activedirectory-identitymodel-extensions-for-dotnet/0003-Fix-assembly-version-calculation-in-2026.patch
+@@ -0,0 +1,38 @@
++Subject: [PATCH] Fix FileVersion calculation in 2026
++
++Bash version of https://github.com/dotnet/dotnet/pull/4043 for
++updateAssemblyInfo.sh, as backported to dotnet/source-build-externals
++release/8.0 in 58cc955939180a043eacd55f917d8a2eead741ed.
++
++Issue: https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet/issues/3388
++
++---
++diff --git a/updateAssemblyInfo.sh b/updateAssemblyInfo.sh
++index c5117975..e71b6c45 100755
++--- a/updateAssemblyInfo.sh
+++++ b/updateAssemblyInfo.sh
++@@ -5,12 +5,23 @@ scriptroot=$(cd -P "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
++ 
++ packageType=${1:-preview}
++ 
+++# Get current date components
+++year=$(date '+%Y')
+++year_offset=$((year - 2019))
+++month=$(date '+%m')
+++day=$(date '+%d')
+++
+++# Calculate revision using the new formula that prevents overflow
+++# Base: 61232 (ensures revision is higher than already shipped packages)
+++# This will overflow in 2029 and needs a long term fix
+++revision=$((61232 + (year_offset * 416) + (10#$month * 32) + 10#$day))
+++
++ date=$(date '+%y%m%d%H%M%S')
++ # Formats the date by replacing the 4-digit year with a 2-digit value and then subtract 19
++ dateTimeStamp=$(echo $((10#${date:0:2}-19)))${date:2}
++ 
++ assemblyVersion=$(sed -n 's/.*<assemblyVersion>\([^<]*\)<.*/\1/p' ${scriptroot}/buildConfiguration.xml)
++-assemblyFileVersion="$assemblyVersion.${dateTimeStamp::$((${#dateTimeStamp} - 6))}" # Trim minutes/seconds
+++assemblyFileVersion="$assemblyVersion.$revision"
++ assemblyInformationalVersion="$assemblyVersion.$dateTimeStamp"
++ 
++ echo "assemblyVersion: $assemblyVersion"

@@ -51,7 +51,7 @@
 
 Name:           dotnet7.0
 Version:        %{sdk_rpm_version}
-Release:        1.1%{?dist}
+Release:        1.3%{?dist}
 Summary:        .NET Runtime and SDK
 License:        MIT and ASL 2.0 and BSD and LGPLv2+ and CC-BY and CC0 and MS-PL and EPL-1.0 and GPL+ and GPLv2 and ISC and OFL and zlib
 URL:            https://github.com/dotnet/
@@ -80,6 +80,8 @@ Patch1:         roslyn-analyzers-ppc64le-apphost.patch
 # https://github.com/dotnet/runtime/pull/95216#issuecomment-1842799314
 Patch2:         runtime-re-enable-implicit-rejection.patch
 
+Patch1001: fix-builds-post-2026.patch
+
 
 %if 0%{?fedora} || 0%{?rhel} >= 8
 ExclusiveArch:  aarch64 ppc64le s390x x86_64
@@ -93,8 +95,8 @@ BuildRequires:  cmake
 BuildRequires:  coreutils
 %if %{without bootstrap}
 # Get out the door with broken LTS by pinning the versions
-BuildRequires:  dotnet-sdk-7.0 == 7.0.115
-BuildRequires:  dotnet-sdk-7.0-source-built-artifacts == 7.0.115
+BuildRequires:  dotnet-sdk-7.0 == %{sdk_version}
+BuildRequires:  dotnet-sdk-7.0-source-built-artifacts == %{sdk_version}
 %endif
 BuildRequires:  findutils
 BuildRequires:  git
@@ -403,6 +405,8 @@ popd
 %patch1 -p1
 %patch2 -p1
 
+%patch1001 -p1
+
 # Fix bad hardcoded path in build
 sed -i 's|/usr/share/dotnet|%{_libdir}/dotnet|' src/runtime/src/native/corehost/hostmisc/pal.unix.cpp
 
@@ -620,6 +624,12 @@ export COMPlus_LTTng=0
 
 
 %changelog
+* Thu Oct 29 2026 Pratham Patel <ppatel@ciq.com> - 7.0.119-1.3
+- Add (backported) patch to fix builds post 2026 (upstream PR: https://github.com/dotnet/dotnet/pull/4043)
+
+* Wed Oct 28 2026 Pratham Patel <ppatel@ciq.com> - 7.0.119-1.2
+- Bump release for rebuild to fix CVE-2026-111497
+
 * Sat May 03 2025 Anmol Jain <ajain@ciq.com> - 7.0.119-1.1
 - Import .NET latest Security Fixes to CIQ LTS 9.2
 - Revert patches for packages conflicting with 8.0 as 8.0 is not present in LTS 9.2
